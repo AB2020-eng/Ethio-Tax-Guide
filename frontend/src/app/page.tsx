@@ -48,6 +48,7 @@ export default function Home() {
   const [isPaymentReady, setIsPaymentReady] = useState(false);
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [micReady, setMicReady] = useState(false);
 
   const tgRef = useRef<TelegramWebApp | undefined>(undefined);
   useEffect(() => {
@@ -56,9 +57,11 @@ export default function Home() {
     }
   }, []);
 
+  const API_URL = process.env.NEXT_PUBLIC_API_URL as string | undefined;
+
   const startPayment = useCallback(async (userId: string, pdfId: string, amount: number) => {
     try {
-      const res = await fetch("http://localhost:8000/api/payment/create", {
+      const res = await fetch(`${API_URL}/api/payment/create`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ user_id: userId, pdf_id: pdfId, amount }),
@@ -73,7 +76,7 @@ export default function Home() {
         tgRef.current.showAlert("Unable to start Telebirr payment. Please try again.");
       }
     }
-  }, []);
+  }, [API_URL]);
 
   useEffect(() => {
     const tg = tgRef.current;
@@ -111,6 +114,23 @@ export default function Home() {
     }
   }, [isPaymentReady]);
 
+  useEffect(() => {
+    if (activeTab !== "chat") return;
+    if (typeof navigator === "undefined") return;
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return;
+    navigator.mediaDevices
+      .getUserMedia({ audio: true })
+      .then((stream) => {
+        setMicReady(true);
+        stream.getTracks().forEach((t) => t.stop());
+      })
+      .catch((err) => {
+        console.error("Permission denied or unavailable:", err);
+        alert("Microphone access is required for chat features.");
+        setMicReady(false);
+      });
+  }, [activeTab]);
+
   const addMessage = (role: "user" | "assistant", content: string) => {
     setMessages((prev) => [
       ...prev,
@@ -131,9 +151,7 @@ export default function Home() {
       ];
       const contexts: string[] = [];
       for (const n of names) {
-        const r = await fetch(
-          `http://localhost:8000/read-pdf/${encodeURIComponent(n)}`
-        );
+        const r = await fetch(`${API_URL}/read-pdf/${encodeURIComponent(n)}`);
         if (r.ok) {
           const j = await r.json();
           contexts.push(j.content ?? "");
@@ -165,7 +183,7 @@ export default function Home() {
     try {
       const form = new FormData();
       form.append("file", uploadFile);
-      const res = await fetch("http://localhost:8000/api/upload", {
+      const res = await fetch(`${API_URL}/api/upload`, {
         method: "POST",
         body: form,
       });
@@ -187,7 +205,7 @@ export default function Home() {
     if (!income || isCalculating) return;
     setIsCalculating(true);
     try {
-      const res = await fetch("http://localhost:8000/api/tax-calc", {
+      const res = await fetch(`${API_URL}/api/tax-calc`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
