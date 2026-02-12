@@ -215,16 +215,20 @@ export default function Home() {
       alert("Voice recognition is not supported on this device.");
       return;
     }
-    const SR =
-      (window as unknown as {
+    const SRCtor =
+      ((window as unknown as {
         SpeechRecognition?: new () => SpeechRecognitionType;
         webkitSpeechRecognition?: new () => SpeechRecognitionType;
-      }).SpeechRecognition ||
-      (window as unknown as {
-        SpeechRecognition?: new () => SpeechRecognitionType;
-        webkitSpeechRecognition?: new () => SpeechRecognitionType;
-      }).webkitSpeechRecognition;
-    const rec = new SR();
+      }).SpeechRecognition ??
+        (window as unknown as {
+          SpeechRecognition?: new () => SpeechRecognitionType;
+          webkitSpeechRecognition?: new () => SpeechRecognitionType;
+        }).webkitSpeechRecognition) ?? null;
+    if (!SRCtor) {
+      alert("Voice recognition is not supported on this device.");
+      return;
+    }
+    const rec = new SRCtor();
     recognitionRef.current = rec;
     rec.lang = lang === "am" ? "am-ET" : "en-US";
     rec.continuous = false;

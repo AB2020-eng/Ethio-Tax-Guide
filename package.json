@@ -1,0 +1,11 @@
+{
+  "name": "ethio-tax-consultant",
+  "private": true,
+  "workspaces": ["frontend"],
+  "scripts": {
+    "build": "npm run build -w frontend",
+    "dev": "npm run dev -w frontend",
+    "start": "npm run start -w frontend",
+    "lint": "npm run lint -w frontend"
+  }
+}
