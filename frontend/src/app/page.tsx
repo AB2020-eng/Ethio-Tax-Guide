@@ -65,12 +65,6 @@ export default function Home() {
   const [recognitionSupported, setRecognitionSupported] = useState(false);
   const [speakEnabled, setSpeakEnabled] = useState(false);
   const [calcFor, setCalcFor] = useState<"employee" | "sole" | "small" | "plc">("employee");
-  const [expSalaries, setExpSalaries] = useState("");
-  const [expRent, setExpRent] = useState("");
-  const [expMaterials, setExpMaterials] = useState("");
-  const [expDepreciation, setExpDepreciation] = useState("");
-  const [expInterest, setExpInterest] = useState("");
-  const [expCharity, setExpCharity] = useState("");
 
   const tgRef = useRef<TelegramWebApp | undefined>(undefined);
   const recognitionRef = useRef<SpeechRecognitionType | null>(null);
@@ -339,58 +333,6 @@ export default function Home() {
     setTaxResult({ estimated_tax: estimated, explanation });
   };
 
-  const calculateSole = () => {
-    const revenue = Number(income || 0);
-    const salaries = Number(expSalaries || 0);
-    const rent = Number(expRent || 0);
-    const materials = Number(expMaterials || 0);
-    const depreciation = Number(expDepreciation || 0);
-    const interest = Number(expInterest || 0);
-    const charityInput = Number(expCharity || 0);
-    const otherExpenses = salaries + rent + materials + depreciation + interest;
-    const preTaxProfit = Math.max(revenue - otherExpenses, 0);
-    const charityCap = preTaxProfit * 0.10;
-    const charityUsed = Math.min(charityInput, charityCap);
-    const taxable = Math.max(preTaxProfit - charityUsed, 0);
-    const brackets: Array<[number, number]> = [
-      [24000, 0.0],
-      [48000, 0.15],
-      [84000, 0.20],
-      [120000, 0.25],
-      [168000, 0.30],
-      [Number.POSITIVE_INFINITY, 0.35],
-    ];
-    let rate = 0, upper = 0;
-    for (const [ub, r] of brackets) {
-      upper = ub;
-      if (taxable <= ub) {
-        rate = r;
-        break;
-      }
-    }
-    const estimated = Math.max(taxable * rate, 0);
-    const mat = revenue * 0.025;
-    const finalTax = Math.max(estimated, mat);
-    const explanation =
-      "Annual Sole Proprietor Tax:\n" +
-      "| Item | Amount |\n" +
-      "|---|---|\n" +
-      `| Annual Revenue | ${revenue.toFixed(2)} ETB |\n` +
-      `| Salaries | ${salaries.toFixed(2)} ETB |\n` +
-      `| Rent & Utilities | ${rent.toFixed(2)} ETB |\n` +
-      `| Raw Materials | ${materials.toFixed(2)} ETB |\n` +
-      `| Depreciation | ${depreciation.toFixed(2)} ETB |\n` +
-      `| Interest | ${interest.toFixed(2)} ETB |\n` +
-      `| Charity (capped ≤10%) | ${charityUsed.toFixed(2)} ETB |\n` +
-      `| Taxable Profit | ${taxable.toFixed(2)} ETB |\n` +
-      `| Bracket | up to ${upper === Number.POSITIVE_INFINITY ? "∞" : upper} ETB |\n` +
-      `| Rate | ${(rate * 100).toFixed(0)}% |\n` +
-      `| Estimated Tax | ${estimated.toFixed(2)} ETB |\n` +
-      `| MAT (2.5% of turnover) | ${mat.toFixed(2)} ETB |\n` +
-      `| Final Tax | ${finalTax.toFixed(2)} ETB |\n`;
-    setTaxResult({ estimated_tax: finalTax, explanation });
-  };
-
 
   const calculateTax = async () => {
     if (!income || isCalculating) return;
@@ -398,8 +340,6 @@ export default function Home() {
     try {
       if (calcFor === "employee") {
         calculateEmployee();
-      } else if (calcFor === "sole") {
-        calculateSole();
       } else {
         setTaxResult({
           estimated_tax: 0,
@@ -409,7 +349,8 @@ export default function Home() {
       }
     } finally {
       setIsCalculating(false);
-    };
+    }
+  };
 
  
 
@@ -589,11 +530,7 @@ export default function Home() {
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">
-                {calcFor === "employee"
-                  ? "Monthly Salary (ETB)"
-                  : calcFor === "sole"
-                  ? "Annual Revenue (ETB)"
-                  : "Monthly Income (ETB)"}
+                {calcFor === "employee" ? "Monthly Salary (ETB)" : "Monthly Income (ETB)"}
               </label>
               <input
                 type="number"
@@ -607,88 +544,6 @@ export default function Home() {
             {calcFor === "employee" && (
               <div className="text-[11px] text-gray-600">
                 Pension (Employee 7%) will be subtracted automatically.
-              </div>
-            )}
-            {calcFor === "sole" && (
-              <div className="grid grid-cols-1 gap-2">
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">
-                    Employee Salaries (ETB)
-                  </label>
-                  <input
-                    type="number"
-                    inputMode="decimal"
-                    className="w-full rounded-2xl border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ethi-green/60"
-                    placeholder="0"
-                    value={expSalaries}
-                    onChange={(e) => setExpSalaries(e.target.value)}
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">
-                    Rent & Utilities (ETB)
-                  </label>
-                  <input
-                    type="number"
-                    inputMode="decimal"
-                    className="w-full rounded-2xl border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ethi-green/60"
-                    placeholder="0"
-                    value={expRent}
-                    onChange={(e) => setExpRent(e.target.value)}
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">
-                    Raw Materials (ETB)
-                  </label>
-                  <input
-                    type="number"
-                    inputMode="decimal"
-                    className="w-full rounded-2xl border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ethi-green/60"
-                    placeholder="0"
-                    value={expMaterials}
-                    onChange={(e) => setExpMaterials(e.target.value)}
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">
-                    Depreciation (ETB)
-                  </label>
-                  <input
-                    type="number"
-                    inputMode="decimal"
-                    className="w-full rounded-2xl border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ethi-green/60"
-                    placeholder="0"
-                    value={expDepreciation}
-                    onChange={(e) => setExpDepreciation(e.target.value)}
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">
-                    Interest (ETB)
-                  </label>
-                  <input
-                    type="number"
-                    inputMode="decimal"
-                    className="w-full rounded-2xl border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ethi-green/60"
-                    placeholder="0"
-                    value={expInterest}
-                    onChange={(e) => setExpInterest(e.target.value)}
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">
-                    Charity (ETB) – capped ≤10% of taxable profit
-                  </label>
-                  <input
-                    type="number"
-                    inputMode="decimal"
-                    className="w-full rounded-2xl border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ethi-green/60"
-                    placeholder="0"
-                    value={expCharity}
-                    onChange={(e) => setExpCharity(e.target.value)}
-                  />
-                </div>
               </div>
             )}
           </div>
@@ -732,5 +587,4 @@ export default function Home() {
       )}
     </div>
   );
-}
 }
