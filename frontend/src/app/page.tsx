@@ -194,6 +194,14 @@ export default function Home() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ prompt: text, pdfContext, lang: usedLang, isFirst: wasFirst }),
       });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({} as any));
+        const msg =
+          (err && (err.error || err.message)) ||
+          "The assistant is temporarily unavailable. Please try again.";
+        addMessage("assistant", msg);
+        return;
+      }
       const data = await res.json();
       const answer = data.text ?? "No answer.";
       addMessage("assistant", answer);

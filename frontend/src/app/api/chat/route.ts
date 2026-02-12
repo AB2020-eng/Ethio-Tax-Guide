@@ -1,13 +1,23 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
-
 export async function POST(req: Request) {
   const { prompt, pdfContext, lang, isFirst } = await req.json();
 
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    return new Response(
+      JSON.stringify({
+        error:
+          "Server is missing GEMINI_API_KEY. Please configure the environment variable.",
+      }),
+      { status: 500 }
+    );
+  }
+  const genAI = new GoogleGenerativeAI(apiKey);
+
   // 1. Select the "Flash" model (Fast & Free)
   const model = genAI.getGenerativeModel({
-    model: "gemini-2.5-flash", // Use the 2026 latest free model
+    model: "gemini-2.5-flash",
     systemInstruction: `You are a helpful AI assistant inside this app.
     Follow these rules automatically:
     - Friendly, conversational, human-like tone.
@@ -52,8 +62,20 @@ export async function POST(req: Request) {
   const greetHint = isFirst ? "Start with a warm, friendly greeting." : "Do not include a greeting.";
   const fullPrompt = `PDF CONTEXT (use first):\n${pdfContext}\n\nUSER QUESTION:\n${prompt}\n\nSTYLE:\n${langHint}\n${greetHint}\nKeep it concise (3–5 sentences), friendly, and clear. If any calculation is involved, include a short table.`;
 
-  const result = await model.generateContent(fullPrompt);
-  const response = await result.response;
-  const text = response.text();
-  return new Response(JSON.stringify({ text }));
+  try {
+    const result = await model.generateContent(fullPrompt);
+    const response = await result.response;
+    const text = response.text();
+    return new Response(JSON.stringify({ text }));
+  } catch (e: any) {
+    return new Response(
+      JSON.stringify({
+        error:
+          typeof e?.message === "string"
+            ? e.message
+            : "Failed to generate response",
+      }),
+      { status: 500 }
+    );
+  }
 }
