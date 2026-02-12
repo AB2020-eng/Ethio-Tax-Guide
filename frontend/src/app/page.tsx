@@ -49,6 +49,7 @@ export default function Home() {
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [micReady, setMicReady] = useState(false);
+  const [lang, setLang] = useState<"en" | "am">("en");
 
   const tgRef = useRef<TelegramWebApp | undefined>(undefined);
   useEffect(() => {
@@ -162,7 +163,7 @@ export default function Home() {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt: text, pdfContext }),
+        body: JSON.stringify({ prompt: text, pdfContext, lang }),
       });
       const data = await res.json();
       const answer = data.text ?? "No answer.";
@@ -239,6 +240,24 @@ export default function Home() {
             <p className="text-[11px] text-gray-500">
               Ask questions or estimate your tax
             </p>
+          </div>
+          <div className="ml-auto">
+            <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-full p-1">
+              <button
+                className={`px-3 py-1 text-xs rounded-full ${lang === "en" ? "bg-ethi-green text-white" : "text-gray-700"}`}
+                onClick={() => setLang("en")}
+                aria-pressed={lang === "en"}
+              >
+                EN
+              </button>
+              <button
+                className={`px-3 py-1 text-xs rounded-full ${lang === "am" ? "bg-ethi-green text-white" : "text-gray-700"}`}
+                onClick={() => setLang("am")}
+                aria-pressed={lang === "am"}
+              >
+                አማ
+              </button>
+            </div>
           </div>
         </div>
         <div className="mt-3 flex gap-2 bg-gray-100 p-1 rounded-full">

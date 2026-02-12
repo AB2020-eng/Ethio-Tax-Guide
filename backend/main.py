@@ -133,16 +133,45 @@ async def chat(payload: ChatRequest):
 @app.post("/api/tax-calc", response_model=TaxCalcResponse)
 async def tax_calc(payload: TaxCalcRequest):
     """
-    Very simplified tax calculator placeholder.
-    Replace with real Ethiopian tax brackets as needed.
+    Employment tax calculator using 2026 monthly brackets.
     """
-    taxable_income = max(payload.income - (payload.deductions or 0.0), 0.0)
-    # Simple flat rate placeholder (e.g. 10%)
-    tax_rate = 0.10
-    estimated_tax = taxable_income * tax_rate
+    income = float(payload.income or 0.0)
+    deductions = float(payload.deductions or 0.0)
+    taxable = max(income - deductions, 0.0)
+
+    # Brackets: (upper_bound, rate, deduction)
+    brackets = [
+        (2000.0, 0.00, 0.0),
+        (4000.0, 0.15, 300.0),
+        (7000.0, 0.20, 500.0),
+        (10000.0, 0.25, 850.0),
+        (14000.0, 0.30, 1350.0),
+        (float("inf"), 0.35, 2050.0),
+    ]
+    # Find bracket
+    rate = 0.0
+    ded = 0.0
+    lower = 0.0
+    upper = 0.0
+    for ub, r, d in brackets:
+        upper = ub
+        if taxable <= ub:
+            rate, ded = r, d
+            break
+        lower = ub
+
+    estimated_tax = max(taxable * rate - ded, 0.0)
     explanation = (
-        f"Estimated tax is calculated as {tax_rate*100:.1f}% of taxable income "
-        f"({taxable_income:.2f}). Replace this with real Ethiopian tax brackets."
+        "Monthly Employment Tax (2026):\n"
+        "| Item | Amount |\n"
+        "|---|---|\n"
+        f"| Income | {income:.2f} ETB |\n"
+        f"| Deductions | {deductions:.2f} ETB |\n"
+        f"| Taxable Income | {taxable:.2f} ETB |\n"
+        f"| Bracket | up to {upper if upper != float('inf') else '∞'} ETB |\n"
+        f"| Rate | {rate*100:.0f}% |\n"
+        f"| Deduction | {ded:.2f} ETB |\n"
+        f"| Estimated Tax | {estimated_tax:.2f} ETB |\n"
     )
     return TaxCalcResponse(estimated_tax=estimated_tax, explanation=explanation)
 
