@@ -55,7 +55,6 @@ export default function Home() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [income, setIncome] = useState(""); // Monthly Salary (Employee)
-  const [deductions, setDeductions] = useState(""); // Other deductions (Employee)
   const [taxResult, setTaxResult] = useState<TaxCalcResponse | null>(null);
   const [isSending, setIsSending] = useState(false);
   const [isCalculating, setIsCalculating] = useState(false);
@@ -302,9 +301,8 @@ export default function Home() {
 
   const calculateEmployee = () => {
     const salary = Number(income || 0);
-    const otherDed = Number(deductions || 0);
     const pension = salary * 0.07;
-    const taxable = Math.max(salary - pension - otherDed, 0);
+    const taxable = Math.max(salary - pension, 0);
     const brackets: Array<[number, number, number]> = [
       [2000, 0.0, 0],
       [4000, 0.15, 300],
@@ -329,7 +327,6 @@ export default function Home() {
       "|---|---|\n" +
       `| Salary | ${salary.toFixed(2)} ETB |\n` +
       `| Employee Pension (7%) | ${pension.toFixed(2)} ETB |\n` +
-      `| Other Deductions | ${otherDed.toFixed(2)} ETB |\n` +
       `| Taxable Income | ${taxable.toFixed(2)} ETB |\n` +
       `| Bracket | up to ${upper === Number.POSITIVE_INFINITY ? "∞" : upper} ETB |\n` +
       `| Rate | ${(rate * 100).toFixed(0)}% |\n` +
@@ -547,23 +544,8 @@ export default function Home() {
               />
             </div>
             {calcFor === "employee" && (
-              <div className="grid grid-cols-1 gap-2">
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">
-                    Other Deductions (ETB)
-                  </label>
-                  <input
-                    type="number"
-                    inputMode="decimal"
-                    className="w-full rounded-2xl border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ethi-green/60"
-                    placeholder="Optional"
-                    value={deductions}
-                    onChange={(e) => setDeductions(e.target.value)}
-                  />
-                </div>
-                <div className="text-[11px] text-gray-600">
-                  Pension (Employee 7%) will be subtracted automatically.
-                </div>
+              <div className="text-[11px] text-gray-600">
+                Pension (Employee 7%) will be subtracted automatically.
               </div>
             )}
           </div>
