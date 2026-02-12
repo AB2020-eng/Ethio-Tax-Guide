@@ -303,34 +303,32 @@ export default function Home() {
     const salary = Number(income || 0);
     const pension = salary * 0.07;
     const taxable = Math.max(salary - pension, 0);
-    const brackets: Array<[number, number, number]> = [
-      [2000, 0.0, 0],
-      [4000, 0.15, 300],
-      [7000, 0.20, 500],
-      [10000, 0.25, 850],
-      [14000, 0.30, 1350],
-      [Number.POSITIVE_INFINITY, 0.35, 2050],
+    const brackets: Array<[number, number]> = [
+      [2000, 0.0],
+      [4000, 0.15],
+      [7000, 0.20],
+      [10000, 0.25],
+      [14000, 0.30],
+      [Number.POSITIVE_INFINITY, 0.35],
     ];
-    let rate = 0, ded = 0, upper = 0;
-    for (const [ub, r, d] of brackets) {
+    let rate = 0, upper = 0;
+    for (const [ub, r] of brackets) {
       upper = ub;
       if (taxable <= ub) {
         rate = r;
-        ded = d;
         break;
       }
     }
-    const estimated = Math.max(taxable * rate - ded, 0);
+    const estimated = Math.max(taxable * rate, 0);
     const explanation =
       "Monthly Employment Tax:\n" +
       "| Item | Amount |\n" +
       "|---|---|\n" +
       `| Salary | ${salary.toFixed(2)} ETB |\n` +
       `| Employee Pension (7%) | ${pension.toFixed(2)} ETB |\n` +
-      `| Taxable Income | ${taxable.toFixed(2)} ETB |\n` +
+      `| Monthly Salary After Pension | ${taxable.toFixed(2)} ETB |\n` +
       `| Bracket | up to ${upper === Number.POSITIVE_INFINITY ? "∞" : upper} ETB |\n` +
       `| Rate | ${(rate * 100).toFixed(0)}% |\n` +
-      `| Deduction | ${ded.toFixed(2)} ETB |\n` +
       `| Estimated Tax | ${estimated.toFixed(2)} ETB |\n`;
     setTaxResult({ estimated_tax: estimated, explanation });
   };
