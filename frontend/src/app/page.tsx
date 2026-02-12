@@ -59,7 +59,7 @@ export default function Home() {
   const [taxResult, setTaxResult] = useState<TaxCalcResponse | null>(null);
   const [isSending, setIsSending] = useState(false);
   const [isCalculating, setIsCalculating] = useState(false);
-  const [isPaymentReady, setIsPaymentReady] = useState(false);
+  const [isPaymentReady] = useState(false);
   const [micReady, setMicReady] = useState(false);
   const [lang, setLang] = useState<"en" | "am">("en");
   const [isRecording, setIsRecording] = useState(false);
@@ -195,10 +195,13 @@ export default function Home() {
         body: JSON.stringify({ prompt: text, pdfContext, lang: usedLang, isFirst: wasFirst }),
       });
       if (!res.ok) {
-        const err = await res.json().catch(() => ({} as any));
-        const msg =
-          (err && (err.error || err.message)) ||
+        const errJson: unknown = await res.json().catch(() => undefined);
+        let msg =
           "The assistant is temporarily unavailable. Please try again.";
+        if (typeof errJson === "object" && errJson !== null) {
+          const eobj = errJson as { error?: string; message?: string };
+          msg = eobj.error ?? eobj.message ?? msg;
+        }
         addMessage("assistant", msg);
         return;
       }

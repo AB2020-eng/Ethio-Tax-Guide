@@ -67,12 +67,12 @@ export async function POST(req: Request) {
     const response = await result.response;
     const text = response.text();
     return new Response(JSON.stringify({ text }));
-  } catch (e: any) {
+  } catch (e: unknown) {
     return new Response(
       JSON.stringify({
         error:
-          typeof e?.message === "string"
-            ? e.message
+          typeof e === "object" && e !== null && "message" in e
+            ? (e as { message: string }).message
             : "Failed to generate response",
       }),
       { status: 500 }
