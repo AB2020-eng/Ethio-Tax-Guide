@@ -1,0 +1,61 @@
+@import "tailwindcss";
+
+:root {
+  --ethi-green: #078930;
+  --ethi-yellow: #fcd116;
+  --ethi-red: #da121a;
+  --ethi-dark: #0b0b0b;
+  --ethi-light: #f9fafb;
+  --background: var(--ethi-light);
+  --foreground: #111827;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+
+  --color-ethi-green: var(--ethi-green);
+  --color-ethi-yellow: var(--ethi-yellow);
+  --color-ethi-red: var(--ethi-red);
+  --color-ethi-bg: var(--ethi-light);
+  --color-ethi-foreground: var(--foreground);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.telegram-safe {
+  max-width: 480px;
+  margin: 0 auto;
+}
+
+.tab-pill {
+  @apply flex-1 text-center py-2 text-sm font-semibold rounded-full cursor-pointer;
+}
+
+.tab-pill-active {
+  background: linear-gradient(
+    90deg,
+    var(--ethi-green),
+    var(--ethi-yellow),
+    var(--ethi-red)
+  );
+  color: white;
+}
+
+.tab-pill-inactive {
+  @apply bg-white text-gray-700;
+}
+
+.chat-bubble-user {
+  @apply self-end bg-ethi-green text-white rounded-2xl rounded-br-sm px-3 py-2 text-sm max-w-[80%];
+}
+
+.chat-bubble-bot {
+  @apply self-start bg-white text-gray-900 rounded-2xl rounded-bl-sm px-3 py-2 text-sm max-w-[80%] border border-gray-100;
+}
