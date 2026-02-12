@@ -150,9 +150,18 @@ export default function Home() {
   useEffect(() => {
     if (activeTab !== "chat") return;
     if (typeof navigator === "undefined") return;
-    const supported =
-      !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
-    setMicReady(supported);
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return;
+    navigator.mediaDevices
+      .getUserMedia({ audio: true })
+      .then((stream) => {
+        setMicReady(true);
+        stream.getTracks().forEach((t) => t.stop());
+      })
+      .catch((err) => {
+        console.error("Permission denied or unavailable:", err);
+        alert("Microphone access is required for chat features.");
+        setMicReady(false);
+      });
   }, [activeTab]);
 
   const addMessage = (role: "user" | "assistant", content: string) => {
