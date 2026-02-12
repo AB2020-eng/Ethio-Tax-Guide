@@ -28,11 +28,24 @@ type TelegramWebApp = {
   showAlert: (message: string) => void;
 };
 
+type SpeechRecognitionType = {
+  lang: string;
+  continuous: boolean;
+  interimResults: boolean;
+  onresult: (e: { results: ArrayLike<{ 0: { transcript: string } }> }) => void;
+  onerror: (e: unknown) => void;
+  onend: () => void;
+  start: () => void;
+  stop: () => void;
+};
+
 declare global {
   interface Window {
     Telegram?: {
       WebApp?: TelegramWebApp;
     };
+    webkitSpeechRecognition?: new () => SpeechRecognitionType;
+    SpeechRecognition?: new () => SpeechRecognitionType;
   }
 }
 
@@ -50,11 +63,24 @@ export default function Home() {
   const [isUploading, setIsUploading] = useState(false);
   const [micReady, setMicReady] = useState(false);
   const [lang, setLang] = useState<"en" | "am">("en");
+  const [isRecording, setIsRecording] = useState(false);
+  const [recognitionSupported, setRecognitionSupported] = useState(false);
 
   const tgRef = useRef<TelegramWebApp | undefined>(undefined);
+  const recognitionRef = useRef<SpeechRecognitionType | null>(null);
   useEffect(() => {
     if (typeof window !== "undefined") {
       tgRef.current = window.Telegram?.WebApp;
+      const SR =
+        (window as unknown as {
+          SpeechRecognition?: new () => SpeechRecognitionType;
+          webkitSpeechRecognition?: new () => SpeechRecognitionType;
+        }).SpeechRecognition ||
+        (window as unknown as {
+          SpeechRecognition?: new () => SpeechRecognitionType;
+          webkitSpeechRecognition?: new () => SpeechRecognitionType;
+        }).webkitSpeechRecognition;
+      setRecognitionSupported(!!SR);
     }
   }, []);
 
@@ -159,11 +185,12 @@ export default function Home() {
         }
       }
       const pdfContext = contexts.join("\n\n");
+      const usedLang: "en" | "am" = /[\u1200-\u137F]/.test(text) ? "am" : lang;
 
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt: text, pdfContext, lang }),
+        body: JSON.stringify({ prompt: text, pdfContext, lang: usedLang }),
       });
       const data = await res.json();
       const answer = data.text ?? "No answer.";
@@ -176,6 +203,49 @@ export default function Home() {
     } finally {
       setIsSending(false);
     }
+  };
+
+  const startVoice = () => {
+    if (!recognitionSupported) {
+      alert("Voice recognition is not supported on this device.");
+      return;
+    }
+    const SR =
+      (window as unknown as {
+        SpeechRecognition?: new () => SpeechRecognitionType;
+        webkitSpeechRecognition?: new () => SpeechRecognitionType;
+      }).SpeechRecognition ||
+      (window as unknown as {
+        SpeechRecognition?: new () => SpeechRecognitionType;
+        webkitSpeechRecognition?: new () => SpeechRecognitionType;
+      }).webkitSpeechRecognition;
+    const rec = new SR();
+    recognitionRef.current = rec;
+    rec.lang = lang === "am" ? "am-ET" : "en-US";
+    rec.continuous = false;
+    rec.interimResults = false;
+    rec.onresult = (e) => {
+      const t = e.results[0][0].transcript;
+      setInput(t);
+      setIsRecording(false);
+      sendQuestion();
+    };
+    rec.onerror = () => {
+      setIsRecording(false);
+    };
+    rec.onend = () => {
+      setIsRecording(false);
+    };
+    setIsRecording(true);
+    rec.start();
+  };
+
+  const stopVoice = () => {
+    const rec = recognitionRef.current;
+    if (rec) {
+      rec.stop();
+    }
+    setIsRecording(false);
   };
 
   const uploadPdf = async () => {
@@ -335,6 +405,15 @@ export default function Home() {
                   }
                 }}
               />
+              <button
+                onClick={isRecording ? stopVoice : startVoice}
+                className={`rounded-full ${isRecording ? "bg-ethi-red" : "bg-ethi-yellow"} text-white px-3 py-2 text-xs font-semibold`}
+                aria-pressed={isRecording}
+                title="Record voice"
+                disabled={!micReady || !recognitionSupported}
+              >
+                {isRecording ? "Stop" : "🎤"}
+              </button>
               <button
                 onClick={sendQuestion}
                 disabled={isSending || !input.trim()}
