@@ -29,8 +29,7 @@ export default function RootLayout({
         <Script src="https://telegram.org/js/telegram-web-app.js" strategy="afterInteractive" />
       </head>
       <body
-        style={{ background: "#f9fafb", color: "#111827" }}
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        className={`${geistSans.variable} ${geistMono.variable} antialiased bg-ethi-bg text-ethi-foreground`}
       >
         {children}
       </body>
