@@ -51,7 +51,7 @@ declare global {
 }
 
 export default function Home() {
-  const [activeTab, setActiveTab] = useState<"chat" | "calculator">("calculator");
+  const [activeTab, setActiveTab] = useState<"chat" | "calculator">("chat");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [income, setIncome] = useState(""); // Monthly Salary (Employee)
@@ -414,7 +414,7 @@ export default function Home() {
  
 
   return (
-    <div className="min-h-screen telegram-safe flex flex-col bg-gray-50 px-3 pb-3 pt-4" style={{ color: "#111827" }}>
+    <div className="min-h-screen telegram-safe flex flex-col bg-ethi-bg px-3 pb-3 pt-4">
       <header className="mb-3">
         <div className="flex items-center gap-2">
           <div className="h-9 w-9 rounded-full bg-gradient-to-br from-ethi-green via-ethi-yellow to-ethi-red flex items-center justify-center text-white text-lg font-bold">
