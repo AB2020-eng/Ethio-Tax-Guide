@@ -5,6 +5,7 @@ from pydantic import BaseModel
 from typing import List, Optional
 import os
 from pypdf import PdfReader
+from datetime import datetime
 
 from rag import answer_question, index_pdf
 from config import settings
@@ -276,3 +277,35 @@ async def download_pdf(pdf_id: str, user_id: str):
     if not os.path.exists(pdf_path):
         raise HTTPException(status_code=404, detail="PDF not found")
     return FileResponse(pdf_path, filename=pdf_id)
+
+
+class FeedbackRequest(BaseModel):
+    message_id: str
+    rating: str  # "like" or "dislike"
+    question: Optional[str] = None
+    answer: Optional[str] = None
+    lang: Optional[str] = None
+
+
+@app.post("/api/feedback")
+async def feedback(payload: FeedbackRequest):
+    """
+    Collect simple feedback for learning/improvement.
+    Appends to data/feedback.json as JSON Lines (one object per line).
+    """
+    os.makedirs(os.path.join(os.getcwd(), "data"), exist_ok=True)
+    path = os.path.join(os.getcwd(), "data", "feedback.json")
+    record = {
+        "ts": datetime.utcnow().isoformat() + "Z",
+        "message_id": payload.message_id,
+        "rating": payload.rating,
+        "question": payload.question,
+        "answer": payload.answer,
+        "lang": payload.lang,
+    }
+    try:
+        with open(path, "a", encoding="utf-8") as f:
+            f.write(json.dumps(record, ensure_ascii=False) + "\n")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to write feedback: {e}")
+    return {"ok": True}

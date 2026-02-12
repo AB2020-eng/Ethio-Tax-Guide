@@ -6,6 +6,7 @@ type ChatMessage = {
   id: string;
   role: "user" | "assistant";
   content: string;
+  rating?: "like" | "dislike";
 };
 
 type TaxCalcResponse = {
@@ -53,8 +54,8 @@ export default function Home() {
   const [activeTab, setActiveTab] = useState<"chat" | "calculator">("chat");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
-  const [income, setIncome] = useState("");
-  const [deductions, setDeductions] = useState("");
+  const [income, setIncome] = useState(""); // Monthly Salary (Employee)
+  const [deductions, setDeductions] = useState(""); // Other deductions (Employee)
   const [taxResult, setTaxResult] = useState<TaxCalcResponse | null>(null);
   const [isSending, setIsSending] = useState(false);
   const [isCalculating, setIsCalculating] = useState(false);
@@ -64,6 +65,7 @@ export default function Home() {
   const [isRecording, setIsRecording] = useState(false);
   const [recognitionSupported, setRecognitionSupported] = useState(false);
   const [speakEnabled, setSpeakEnabled] = useState(false);
+  const [calcFor, setCalcFor] = useState<"employee" | "sole" | "small" | "plc">("employee");
 
   const tgRef = useRef<TelegramWebApp | undefined>(undefined);
   const recognitionRef = useRef<SpeechRecognitionType | null>(null);
@@ -257,24 +259,88 @@ export default function Home() {
     setIsRecording(false);
   };
 
+  const speakText = (text: string) => {
+    if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
+    const isAmharic = /[\u1200-\u137F]/.test(text);
+    const utter = new SpeechSynthesisUtterance(text);
+    utter.lang = isAmharic ? "am-ET" : "en-US";
+    window.speechSynthesis.speak(utter);
+  };
+
+  const sendFeedback = async (messageId: string, rating: "like" | "dislike") => {
+    try {
+      const idx = messages.findIndex((m) => m.id === messageId);
+      const answer = idx >= 0 ? messages[idx].content : undefined;
+      const prevUser = idx >= 0 ? [...messages.slice(0, idx)].reverse().find((m) => m.role === "user") : undefined;
+      const question = prevUser?.content;
+      if (!API_URL) return;
+      await fetch(`${API_URL}/api/feedback`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message_id: messageId, rating, question, answer, lang }),
+      });
+    } catch {
+      // ignore
+    }
+  };
+
+  const handleRate = (id: string, rating: "like" | "dislike") => {
+    setMessages((prev) => prev.map((m) => (m.id === id ? { ...m, rating } : m)));
+    sendFeedback(id, rating);
+  };
+
+  const calculateEmployee = () => {
+    const salary = Number(income || 0);
+    const otherDed = Number(deductions || 0);
+    const pension = salary * 0.07;
+    const taxable = Math.max(salary - pension - otherDed, 0);
+    const brackets: Array<[number, number, number]> = [
+      [2000, 0.0, 0],
+      [4000, 0.15, 300],
+      [7000, 0.20, 500],
+      [10000, 0.25, 850],
+      [14000, 0.30, 1350],
+      [Number.POSITIVE_INFINITY, 0.35, 2050],
+    ];
+    let rate = 0, ded = 0, upper = 0;
+    for (const [ub, r, d] of brackets) {
+      upper = ub;
+      if (taxable <= ub) {
+        rate = r;
+        ded = d;
+        break;
+      }
+    }
+    const estimated = Math.max(taxable * rate - ded, 0);
+    const explanation =
+      "Monthly Employment Tax:\n" +
+      "| Item | Amount |\n" +
+      "|---|---|\n" +
+      `| Salary | ${salary.toFixed(2)} ETB |\n` +
+      `| Employee Pension (7%) | ${pension.toFixed(2)} ETB |\n` +
+      `| Other Deductions | ${otherDed.toFixed(2)} ETB |\n` +
+      `| Taxable Income | ${taxable.toFixed(2)} ETB |\n` +
+      `| Bracket | up to ${upper === Number.POSITIVE_INFINITY ? "∞" : upper} ETB |\n` +
+      `| Rate | ${(rate * 100).toFixed(0)}% |\n` +
+      `| Deduction | ${ded.toFixed(2)} ETB |\n` +
+      `| Estimated Tax | ${estimated.toFixed(2)} ETB |\n`;
+    setTaxResult({ estimated_tax: estimated, explanation });
+  };
+
 
   const calculateTax = async () => {
     if (!income || isCalculating) return;
     setIsCalculating(true);
     try {
-      const res = await fetch(`${API_URL}/api/tax-calc`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          income: Number(income),
-          deductions: deductions ? Number(deductions) : 0,
-        }),
-      });
-      const data: TaxCalcResponse = await res.json();
-      setTaxResult(data);
-      setIsPaymentReady(true);
-    } catch {
-      // Optionally surface error
+      if (calcFor === "employee") {
+        calculateEmployee();
+      } else {
+        setTaxResult({
+          estimated_tax: 0,
+          explanation:
+            "Business calculation coming soon. Please select Employee for now.",
+        });
+      }
     } finally {
       setIsCalculating(false);
     }
@@ -359,13 +425,41 @@ export default function Home() {
               </div>
             )}
             {messages.map((m) => (
-              <div
-                key={m.id}
-                className={
-                  m.role === "user" ? "chat-bubble-user" : "chat-bubble-bot"
-                }
-              >
-                {m.content}
+              <div key={m.id}>
+                <div
+                  className={
+                    m.role === "user" ? "chat-bubble-user" : "chat-bubble-bot"
+                  }
+                >
+                  {m.content}
+                </div>
+                {m.role === "assistant" && (
+                  <div className="mt-1 ml-10 flex items-center gap-2 text-[11px]">
+                    <button
+                      className={`px-2 py-1 rounded-full border ${m.rating === "like" ? "bg-ethi-green text-white border-ethi-green" : "border-gray-200 text-gray-700"}`}
+                      onClick={() => handleRate(m.id, "like")}
+                      aria-pressed={m.rating === "like"}
+                      title="Like"
+                    >
+                      👍
+                    </button>
+                    <button
+                      className={`px-2 py-1 rounded-full border ${m.rating === "dislike" ? "bg-ethi-red text-white border-ethi-red" : "border-gray-200 text-gray-700"}`}
+                      onClick={() => handleRate(m.id, "dislike")}
+                      aria-pressed={m.rating === "dislike"}
+                      title="Dislike"
+                    >
+                      👎
+                    </button>
+                    <button
+                      className="px-2 py-1 rounded-full border border-gray-200 text-gray-700"
+                      onClick={() => speakText(m.content)}
+                      title="Play audio"
+                    >
+                      ▶
+                    </button>
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -408,7 +502,29 @@ export default function Home() {
           <div className="space-y-3">
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">
-                Monthly Income (ETB)
+                Calculate Tax For:
+              </label>
+              <div className="flex gap-2">
+                {[
+                  { key: "employee", label: "Employee" },
+                  { key: "sole", label: "Sole Proprietor" },
+                  { key: "small", label: "Small Business" },
+                  { key: "plc", label: "PLC" },
+                ].map((opt) => (
+                  <button
+                    key={opt.key}
+                    className={`tab-pill ${calcFor === (opt.key as typeof calcFor) ? "tab-pill-active" : "tab-pill-inactive"}`}
+                    onClick={() => setCalcFor(opt.key as typeof calcFor)}
+                    aria-pressed={calcFor === (opt.key as typeof calcFor)}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">
+                {calcFor === "employee" ? "Monthly Salary (ETB)" : "Monthly Income (ETB)"}
               </label>
               <input
                 type="number"
@@ -419,19 +535,26 @@ export default function Home() {
                 onChange={(e) => setIncome(e.target.value)}
               />
             </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">
-                Allowable Deductions (ETB)
-              </label>
-              <input
-                type="number"
-                inputMode="decimal"
-                className="w-full rounded-2xl border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ethi-green/60"
-                placeholder="Optional"
-                value={deductions}
-                onChange={(e) => setDeductions(e.target.value)}
-              />
-            </div>
+            {calcFor === "employee" && (
+              <div className="grid grid-cols-1 gap-2">
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                    Other Deductions (ETB)
+                  </label>
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    className="w-full rounded-2xl border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ethi-green/60"
+                    placeholder="Optional"
+                    value={deductions}
+                    onChange={(e) => setDeductions(e.target.value)}
+                  />
+                </div>
+                <div className="text-[11px] text-gray-600">
+                  Pension (Employee 7%) will be subtracted automatically.
+                </div>
+              </div>
+            )}
           </div>
 
           <button
@@ -446,7 +569,7 @@ export default function Home() {
             <div className="mt-4 rounded-2xl bg-gray-50 border border-gray-100 p-3 text-sm">
               <div className="flex items-baseline justify-between">
                 <span className="text-xs font-medium text-gray-500">
-                  Estimated Monthly Tax
+                  {calcFor === "employee" ? "Estimated Monthly Tax" : "Estimated Tax"}
                 </span>
                 <span className="text-lg font-bold text-ethi-green">
                   {taxResult.estimated_tax.toLocaleString("en-ET", {
