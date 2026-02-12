@@ -59,12 +59,11 @@ export default function Home() {
   const [isSending, setIsSending] = useState(false);
   const [isCalculating, setIsCalculating] = useState(false);
   const [isPaymentReady, setIsPaymentReady] = useState(false);
-  const [uploadFile, setUploadFile] = useState<File | null>(null);
-  const [isUploading, setIsUploading] = useState(false);
   const [micReady, setMicReady] = useState(false);
   const [lang, setLang] = useState<"en" | "am">("en");
   const [isRecording, setIsRecording] = useState(false);
   const [recognitionSupported, setRecognitionSupported] = useState(false);
+  const [speakEnabled, setSpeakEnabled] = useState(false);
 
   const tgRef = useRef<TelegramWebApp | undefined>(undefined);
   const recognitionRef = useRef<SpeechRecognitionType | null>(null);
@@ -168,6 +167,7 @@ export default function Home() {
   const sendQuestion = async () => {
     if (!input.trim() || isSending) return;
     const text = input.trim();
+    const wasFirst = messages.length === 0;
     setInput("");
     addMessage("user", text);
     setIsSending(true);
@@ -190,11 +190,16 @@ export default function Home() {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt: text, pdfContext, lang: usedLang }),
+        body: JSON.stringify({ prompt: text, pdfContext, lang: usedLang, isFirst: wasFirst }),
       });
       const data = await res.json();
       const answer = data.text ?? "No answer.";
       addMessage("assistant", answer);
+      if (speakEnabled && typeof window !== "undefined" && "speechSynthesis" in window) {
+        const utter = new SpeechSynthesisUtterance(answer);
+        utter.lang = usedLang === "am" ? "am-ET" : "en-US";
+        window.speechSynthesis.speak(utter);
+      }
     } catch {
       addMessage(
         "assistant",
@@ -248,29 +253,6 @@ export default function Home() {
     setIsRecording(false);
   };
 
-  const uploadPdf = async () => {
-    if (!uploadFile || isUploading) return;
-    setIsUploading(true);
-    try {
-      const form = new FormData();
-      form.append("file", uploadFile);
-      const res = await fetch(`${API_URL}/api/upload`, {
-        method: "POST",
-        body: form,
-      });
-      const data = await res.json();
-      if (data.indexed) {
-        addMessage("assistant", `Uploaded and indexed: ${data.filename}`);
-        setUploadFile(null);
-      } else {
-        addMessage("assistant", "Upload did not index. Please try again.");
-      }
-    } catch {
-      addMessage("assistant", "Upload failed. Please try again.");
-    } finally {
-      setIsUploading(false);
-    }
-  };
 
   const calculateTax = async () => {
     if (!income || isCalculating) return;
@@ -349,34 +331,27 @@ export default function Home() {
           >
             Tax Calculator
           </button>
+          <div className="ml-auto flex items-center gap-2 px-2">
+            <span className="text-[11px] text-gray-600">Speak answers</span>
+            <button
+              className={`px-3 py-1 text-xs rounded-full ${speakEnabled ? "bg-ethi-green text-white" : "bg-white text-gray-700 border border-gray-200"}`}
+              onClick={() => setSpeakEnabled((v) => !v)}
+              aria-pressed={speakEnabled}
+              title="Toggle spoken answers"
+            >
+              {speakEnabled ? "On" : "Off"}
+            </button>
+          </div>
         </div>
       </header>
 
       {activeTab === "chat" ? (
         <section className="flex-1 flex flex-col rounded-3xl bg-gradient-to-b from-white to-gray-50 border border-gray-100 shadow-sm overflow-hidden">
-          <div className="flex flex-col gap-2 p-3">
-            <div className="flex items-center gap-2">
-              <input
-                type="file"
-                accept="application/pdf"
-                onChange={(e) => setUploadFile(e.target.files?.[0] ?? null)}
-                className="flex-1 text-xs file:mr-2 file:px-3 file:py-1.5 file:rounded-full file:border file:border-gray-200 file:bg-white file:text-xs file:font-semibold file:text-gray-700"
-              />
-              <button
-                onClick={uploadPdf}
-                disabled={!uploadFile || isUploading}
-                className="rounded-full bg-gradient-to-r from-ethi-green via-ethi-yellow to-ethi-red text-white px-4 py-2 text-xs font-semibold disabled:opacity-60"
-              >
-                {isUploading ? "Uploading…" : "Upload PDF"}
-              </button>
-            </div>
-          </div>
+          <div className="flex flex-col gap-2 p-3" />
           <div className="flex-1 flex flex-col gap-2 px-3 pb-3 overflow-y-auto">
             {messages.length === 0 && (
               <div className="text-xs text-gray-500 text-center mt-4">
-                Ask a question about Ethiopian tax. The assistant will only
-                answer based on your uploaded proclamations and will always cite
-                the relevant Article.
+                Ask a question about Ethiopian tax or calculate your tax. The assistant will only answer based on Ethiopian tax law proclamations.
               </div>
             )}
             {messages.map((m) => (
