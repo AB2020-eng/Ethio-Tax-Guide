@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback, useRef } from "react";
+import dynamic from "next/dynamic";
 
 type ChatMessage = {
   id: string;
@@ -65,6 +66,10 @@ export default function Home() {
   const [recognitionSupported, setRecognitionSupported] = useState(false);
   const [speakEnabled, setSpeakEnabled] = useState(false);
   const [calcFor, setCalcFor] = useState<"employee" | "sole" | "small" | "plc">("employee");
+  const SoleSection = dynamic(() => import("./components/SoleProprietorSection"), {
+    ssr: false,
+    loading: () => <div className="text-xs text-gray-500">Loading…</div>,
+  });
 
   const tgRef = useRef<TelegramWebApp | undefined>(undefined);
   const recognitionRef = useRef<SpeechRecognitionType | null>(null);
@@ -530,31 +535,42 @@ export default function Home() {
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">
-                {calcFor === "employee" ? "Monthly Salary (ETB)" : "Monthly Income (ETB)"}
+                {calcFor === "employee"
+                  ? "Monthly Salary (ETB)"
+                  : calcFor === "sole"
+                  ? "Annual Revenue (ETB)"
+                  : "Monthly Income (ETB)"}
               </label>
-              <input
-                type="number"
-                inputMode="decimal"
-                className="w-full rounded-2xl border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ethi-green/60"
-                placeholder="e.g. 25,000"
-                value={income}
-                onChange={(e) => setIncome(e.target.value)}
-              />
+              {calcFor !== "sole" && (
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  className="w-full rounded-2xl border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ethi-green/60"
+                  placeholder="e.g. 25,000"
+                  value={income}
+                  onChange={(e) => setIncome(e.target.value)}
+                />
+              )}
             </div>
             {calcFor === "employee" && (
               <div className="text-[11px] text-gray-600">
                 Pension (Employee 7%) will be subtracted automatically.
               </div>
             )}
+            {calcFor === "sole" && (
+              <SoleSection onResult={(res) => setTaxResult(res)} />
+            )}
           </div>
 
-          <button
-            onClick={calculateTax}
-            disabled={!income || isCalculating}
-            className="mt-4 w-full rounded-full bg-gradient-to-r from-ethi-green via-ethi-yellow to-ethi-red text-white py-2.5 text-sm font-semibold shadow-sm disabled:opacity-60"
-          >
-            {isCalculating ? "Calculating…" : "Calculate Tax"}
-          </button>
+          {calcFor !== "sole" && (
+            <button
+              onClick={calculateTax}
+              disabled={!income || isCalculating}
+              className="mt-4 w-full rounded-full bg-gradient-to-r from-ethi-green via-ethi-yellow to-ethi-red text-white py-2.5 text-sm font-semibold shadow-sm disabled:opacity-60"
+            >
+              {isCalculating ? "Calculating…" : "Calculate Tax"}
+            </button>
+          )}
 
           {taxResult && (
             <div className="mt-4 rounded-2xl bg-gray-50 border border-gray-100 p-3 text-sm">
