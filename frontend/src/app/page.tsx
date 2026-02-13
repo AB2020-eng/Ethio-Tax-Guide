@@ -70,6 +70,10 @@ export default function Home() {
     ssr: false,
     loading: () => <div className="text-xs text-gray-500">Loading…</div>,
   });
+  const SmallSection = dynamic(() => import("./components/SmallBusinessSection"), {
+    ssr: false,
+    loading: () => <div className="text-xs text-gray-500">Loading…</div>,
+  });
 
   const tgRef = useRef<TelegramWebApp | undefined>(undefined);
   const recognitionRef = useRef<SpeechRecognitionType | null>(null);
@@ -539,9 +543,11 @@ export default function Home() {
                   ? "Monthly Salary (ETB)"
                   : calcFor === "sole"
                   ? "Annual Revenue (ETB)"
+                  : calcFor === "small"
+                  ? "Annual Gross Sales (ETB)"
                   : "Monthly Income (ETB)"}
               </label>
-              {calcFor !== "sole" && (
+              {calcFor === "employee" && (
                 <input
                   type="number"
                   inputMode="decimal"
@@ -560,9 +566,12 @@ export default function Home() {
             {calcFor === "sole" && (
               <SoleSection onResult={(res) => setTaxResult(res)} />
             )}
+            {calcFor === "small" && (
+              <SmallSection onResult={(res) => setTaxResult(res)} />
+            )}
           </div>
 
-          {calcFor !== "sole" && (
+          {calcFor === "employee" && (
             <button
               onClick={calculateTax}
               disabled={!income || isCalculating}
