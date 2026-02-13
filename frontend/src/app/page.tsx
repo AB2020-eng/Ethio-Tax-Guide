@@ -74,6 +74,10 @@ export default function Home() {
     ssr: false,
     loading: () => <div className="text-xs text-gray-500">Loading…</div>,
   });
+  const PLCSection = dynamic(() => import("./components/PLCSection"), {
+    ssr: false,
+    loading: () => <div className="text-xs text-gray-500">Loading…</div>,
+  });
 
   const tgRef = useRef<TelegramWebApp | undefined>(undefined);
   const recognitionRef = useRef<SpeechRecognitionType | null>(null);
@@ -545,6 +549,8 @@ export default function Home() {
                   ? "Annual Revenue (ETB)"
                   : calcFor === "small"
                   ? "Annual Gross Sales (ETB)"
+                  : calcFor === "plc"
+                  ? "Annual Gross Sales (ETB)"
                   : "Monthly Income (ETB)"}
               </label>
               {calcFor === "employee" && (
@@ -568,6 +574,9 @@ export default function Home() {
             )}
             {calcFor === "small" && (
               <SmallSection onResult={(res) => setTaxResult(res)} />
+            )}
+            {calcFor === "plc" && (
+              <PLCSection onResult={(res) => setTaxResult(res)} />
             )}
           </div>
 
