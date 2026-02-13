@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import dynamic from "next/dynamic";
+import PremiumOverlay from "./components/PremiumOverlay";
 
 type ChatMessage = {
   id: string;
@@ -67,6 +68,9 @@ export default function Home() {
   const [speakEnabled, setSpeakEnabled] = useState(false);
   const [calcFor, setCalcFor] = useState<"employee" | "sole" | "small" | "plc">("employee");
   const [voicesReady, setVoicesReady] = useState(false);
+  const [isPaid, setIsPaid] = useState(false);
+  const [overlayOpen, setOverlayOpen] = useState(false);
+  const [reportUrl, setReportUrl] = useState<string | null>(null);
   const SoleSection = dynamic(() => import("./components/SoleProprietorSection"), {
     ssr: false,
     loading: () => <div className="text-xs text-gray-500">Loading…</div>,
@@ -354,6 +358,28 @@ export default function Home() {
   const handleRate = (id: string, rating: "like" | "dislike") => {
     setMessages((prev) => prev.map((m) => (m.id === id ? { ...m, rating } : m)));
     sendFeedback(id, rating);
+  };
+
+  const getTelegramUserId = () => {
+    try {
+      const anyWin = window as any;
+      const tg = anyWin.Telegram?.WebApp;
+      const id = tg?.initDataUnsafe?.user?.id;
+      return id ? String(id) : "demo-user";
+    } catch {
+      return "demo-user";
+    }
+  };
+
+  const checkLatestPayment = async () => {
+    const uid = getTelegramUserId();
+    const res = await fetch(`/api/payment/latest?user_id=${encodeURIComponent(uid)}`);
+    if (!res.ok) return;
+    const j = await res.json();
+    if (j.latest_status === "approved" && j.file_url) {
+      setIsPaid(true);
+      setReportUrl(j.file_url);
+    }
   };
 
   const calculateEmployee = () => {
@@ -659,6 +685,34 @@ export default function Home() {
                 This is an estimate only. Always cross-check with the latest
                 Ethiopian tax proclamations.
               </p>
+              <div className="mt-3 flex items-center gap-2">
+                <button
+                  className="rounded-full bg-ethi-green text-white px-4 py-2 text-xs font-semibold"
+                  onClick={() => {
+                    if (!isPaid) {
+                      setOverlayOpen(true);
+                    }
+                  }}
+                >
+                  Generate Report (PDF)
+                </button>
+                <button
+                  className="rounded-full bg-white text-gray-700 border border-gray-200 px-3 py-2 text-xs"
+                  onClick={checkLatestPayment}
+                >
+                  Check Approval
+                </button>
+                {reportUrl && (
+                  <a
+                    href={reportUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="rounded-full bg-ethi-yellow text-white px-3 py-2 text-xs font-semibold"
+                  >
+                    Download Now
+                  </a>
+                )}
+              </div>
             </div>
           )}
 
@@ -668,6 +722,18 @@ export default function Home() {
           </div>
         </section>
       )}
+      <PremiumOverlay
+        open={overlayOpen}
+        onClose={() => setOverlayOpen(false)}
+        userId={typeof window !== "undefined" ? getTelegramUserId() : "demo-user"}
+        amount={100}
+        taxData={{
+          explanation: taxResult?.explanation,
+          estimated_tax: taxResult?.estimated_tax,
+          calcFor,
+        }}
+        onUploaded={() => {}}
+      />
     </div>
   );
 }
