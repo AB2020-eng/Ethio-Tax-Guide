@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { supabaseAdmin } from "@/lib/supabase";
 
 async function ensureBucket(url: string, key: string, bucket: string) {
   try {
@@ -15,11 +16,10 @@ async function ensureBucket(url: string, key: string, bucket: string) {
 }
 
 export async function POST(req: NextRequest) {
-  const SUPABASE_URL = process.env.SUPABASE_URL;
-  const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
   const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
   const TELEGRAM_ADMIN_GROUP_ID = process.env.TELEGRAM_ADMIN_GROUP_ID;
-  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+  const admin = supabaseAdmin();
+  if (!admin) {
     return NextResponse.json({ error: "Supabase env missing" }, { status: 500 });
   }
   const form = await req.formData();
@@ -30,45 +30,35 @@ export async function POST(req: NextRequest) {
   if (!user_id || !screenshot) {
     return NextResponse.json({ error: "user_id or screenshot missing" }, { status: 400 });
   }
-  await ensureBucket(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, "screenshots");
-  const path = `screenshots/${user_id}-${Date.now()}-${screenshot.name}`;
-  const ab = Buffer.from(await screenshot.arrayBuffer());
-  const uploadRes = await fetch(`${SUPABASE_URL}/storage/v1/object/${path}`, {
-    method: "POST",
-    headers: {
-      apikey: SUPABASE_SERVICE_ROLE_KEY,
-      Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
-      "Content-Type": screenshot.type || "application/octet-stream",
-      "x-upsert": "true",
-    },
-    body: ab,
+  try {
+    await admin.storage.createBucket("screenshots", { public: true });
+  } catch {}
+  const path = `${user_id}-${Date.now()}-${screenshot.name}`;
+  const bucket = admin.storage.from("screenshots");
+  const up = await bucket.upload(path, screenshot, {
+    contentType: screenshot.type || "application/octet-stream",
+    upsert: true,
   });
-  if (!uploadRes.ok) {
+  if (up.error) {
     return NextResponse.json({ error: "Upload failed" }, { status: 500 });
   }
-  const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/${path}`;
-  const insertRes = await fetch(`${SUPABASE_URL}/rest/v1/payments`, {
-    method: "POST",
-    headers: {
-      apikey: SUPABASE_SERVICE_ROLE_KEY,
-      Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
-      "Content-Type": "application/json",
-      Prefer: "return=representation",
-    },
-    body: JSON.stringify({
-      user_id,
-      screenshot_file_id: path,
+  const { data: pub } = bucket.getPublicUrl(path);
+  const publicUrl = pub.publicUrl;
+  const ins = await admin
+    .from("payments")
+    .insert({
+      user_id: Number(user_id),
+      screenshot_file_id: "", // will fill with Telegram file_id below
       status: "pending",
-      amount,
+      amount: Number(amount),
       tax_data: tax_data_raw || null,
-    }),
-  });
-  if (!insertRes.ok) {
+    })
+    .select()
+    .single();
+  if (ins.error || !ins.data) {
     return NextResponse.json({ error: "DB insert failed" }, { status: 500 });
   }
-  const inserted = await insertRes.json();
-  const payment = Array.isArray(inserted) ? inserted[0] : inserted;
-  const payment_id = payment.id;
+  const payment_id = ins.data.id;
   if (TELEGRAM_BOT_TOKEN && TELEGRAM_ADMIN_GROUP_ID) {
     const caption = `New Payment Received!\nUser: ${user_id}\nAmount: ${amount} ETB`;
     const reply_markup = {
@@ -77,7 +67,7 @@ export async function POST(req: NextRequest) {
         [{ text: "❌ Reject", callback_data: `reject_${payment_id}_${user_id}` }],
       ],
     };
-    await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendPhoto`, {
+    const tgRes = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendPhoto`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -87,6 +77,14 @@ export async function POST(req: NextRequest) {
         reply_markup,
       }),
     });
+    const tgJson = await tgRes.json().catch(() => ({}));
+    const fileId =
+      tgJson?.result?.photo?.[tgJson?.result?.photo?.length - 1]?.file_id ||
+      tgJson?.result?.photo?.[0]?.file_id ||
+      "";
+    if (fileId) {
+      await admin.from("payments").update({ screenshot_file_id: fileId }).eq("id", payment_id);
+    }
   }
   return NextResponse.json({ ok: true, payment_id });
 }
