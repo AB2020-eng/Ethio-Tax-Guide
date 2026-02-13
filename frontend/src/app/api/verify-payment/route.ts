@@ -35,12 +35,14 @@ export async function POST(req: NextRequest) {
   } catch {}
   const path = `${user_id}-${Date.now()}-${screenshot.name}`;
   const bucket = admin.storage.from("screenshots");
-  const up = await bucket.upload(path, screenshot, {
+  const ab = await screenshot.arrayBuffer();
+  const blob = new Blob([ab], { type: screenshot.type || "application/octet-stream" });
+  const up = await bucket.upload(path, blob, {
     contentType: screenshot.type || "application/octet-stream",
     upsert: true,
   });
   if (up.error) {
-    return NextResponse.json({ error: "Upload failed" }, { status: 500 });
+    return NextResponse.json({ error: "Upload failed", details: up.error.message }, { status: 500 });
   }
   const { data: pub } = bucket.getPublicUrl(path);
   const publicUrl = pub.publicUrl;
@@ -51,7 +53,6 @@ export async function POST(req: NextRequest) {
       screenshot_file_id: "", // will fill with Telegram file_id below
       status: "pending",
       amount: Number(amount),
-      tax_data: tax_data_raw || null,
     })
     .select()
     .single();
@@ -60,11 +61,11 @@ export async function POST(req: NextRequest) {
   }
   const payment_id = ins.data.id;
   if (TELEGRAM_BOT_TOKEN && TELEGRAM_ADMIN_GROUP_ID) {
-    const caption = `New Payment Received!\nUser: ${user_id}\nAmount: ${amount} ETB`;
+    const caption = `New Payment from User ID: ${user_id}. Amount: ${amount} ETB. Verify in Telebirr.`;
     const reply_markup = {
       inline_keyboard: [
-        [{ text: "✅ Approve & Send Report", callback_data: `approve_${payment_id}_${user_id}` }],
-        [{ text: "❌ Reject", callback_data: `reject_${payment_id}_${user_id}` }],
+        [{ text: "✅ Approve", callback_data: `approve_${payment_id}` }],
+        [{ text: "❌ Reject", callback_data: `reject_${payment_id}` }],
       ],
     };
     const tgRes = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendPhoto`, {

@@ -19,11 +19,8 @@ export async function GET(req: NextRequest) {
   arr.sort((a: any, b: any) => (a.id > b.id ? -1 : 1));
   const latest = arr[0] || null;
   let file_url = null;
-  if (latest?.report_file_id) {
-    const bucketPath = latest.report_file_id as string;
-    const [bucket, ...rest] = bucketPath.split("/");
-    const key = rest.join("/");
-    const { data } = admin.storage.from(bucket).getPublicUrl(key);
+  if (latest?.status === "approved") {
+    const { data } = admin.storage.from("reports").getPublicUrl(`${latest.id}.pdf`);
     file_url = data.publicUrl;
   }
   return NextResponse.json({ latest_status: latest?.status || null, file_url });

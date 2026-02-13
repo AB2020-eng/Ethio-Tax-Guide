@@ -66,19 +66,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "update failed" }, { status: 500 });
   }
   if (status === "approved") {
-    const tax_data_raw = rec.tax_data || "";
-    let summary = "";
-    let taxLine = "";
-    try {
-      const td = JSON.parse(tax_data_raw || "{}");
-      summary = String(td.explanation || "");
-      taxLine = `Estimated Tax: ${td.estimated_tax ?? ""} ETB`;
-    } catch {}
-    const pdf = buildPdfContent(String(rec.user_id), summary.slice(0, 800), taxLine);
+    const summary = `Paid Amount: ${rec.amount ?? ""} ETB`;
+    const taxLine = "";
+    const pdf = buildPdfContent(String(rec.user_id), summary, taxLine);
     try {
       await admin.storage.createBucket("reports", { public: true });
     } catch {}
-    const fname = `Tax_Report_${new Date().toISOString().slice(0, 10)}.pdf`;
+    const fname = `${payment_id}.pdf`;
     const bucket = admin.storage.from("reports");
     const up = await bucket.upload(fname, new Blob([pdf], { type: "application/pdf" }), {
       contentType: "application/pdf",
@@ -88,7 +82,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "upload failed" }, { status: 500 });
     }
     const { data: pub } = bucket.getPublicUrl(fname);
-    await admin.from("payments").update({ report_file_id: `reports/${fname}` }).eq("id", payment_id);
     await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendDocument`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },

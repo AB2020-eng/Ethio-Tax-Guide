@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { supabaseAdmin } from "@/lib/supabase";
 
 function buildPdfContent(name: string, summary: string, tax: string): string {
   const objects: string[] = [];
@@ -55,10 +56,9 @@ async function ensureBucket(url: string, key: string, bucket: string) {
 }
 
 export async function POST(req: NextRequest) {
-  const SUPABASE_URL = process.env.SUPABASE_URL;
-  const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
   const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
-  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY || !TELEGRAM_BOT_TOKEN) {
+  const admin = supabaseAdmin();
+  if (!TELEGRAM_BOT_TOKEN || !admin) {
     return NextResponse.json({ error: "env missing" }, { status: 500 });
   }
   const update = await req.json();
@@ -67,87 +67,60 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true });
   }
   const data = String(cb.data || "");
-  const chatId = cb.message?.chat?.id ?? cb.from?.id;
   if (data.startsWith("approve_")) {
-    const parts = data.split("_");
-    const payment_id = parts[1];
-    const user_id = parts[2];
-    const selRes = await fetch(`${SUPABASE_URL}/rest/v1/payments?id=eq.${payment_id}`, {
-      headers: {
-        apikey: SUPABASE_SERVICE_ROLE_KEY,
-        Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
-        Prefer: "return=representation",
-      },
-    });
-    const arr = await selRes.json();
-    const rec = Array.isArray(arr) ? arr[0] : arr;
-    const tax_data_raw = rec?.tax_data || "";
-    let summary = "";
-    let taxLine = "";
-    try {
-      const td = JSON.parse(tax_data_raw || "{}");
-      summary = String(td.explanation || "");
-      taxLine = `Estimated Tax: ${td.estimated_tax ?? ""} ETB`;
-    } catch {}
-    await fetch(`${SUPABASE_URL}/rest/v1/payments?id=eq.${payment_id}`, {
-      method: "PATCH",
-      headers: {
-        apikey: SUPABASE_SERVICE_ROLE_KEY,
-        Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ status: "approved" }),
-    });
-    const pdf = buildPdfContent(String(user_id), summary.slice(0, 800), taxLine);
-    await ensureBucket(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, "reports");
-    const fname = `reports/Tax_Report_${new Date().toISOString().slice(0, 10)}.pdf`;
-    const blob = new Blob([pdf], { type: "application/pdf" });
-    const uploadRes = await fetch(`${SUPABASE_URL}/storage/v1/object/${fname}`, {
+    const payment_id = data.replace("approve_", "");
+    const { data: rec, error } = await admin.from("payments").select("*").eq("id", payment_id).single();
+    if (error || !rec) return NextResponse.json({ error: "not found" }, { status: 404 });
+    const summary = `Paid Amount: ${rec.amount ?? ""} ETB`;
+    const taxLine = "";
+    await admin.from("payments").update({ status: "approved" }).eq("id", payment_id);
+    await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
       method: "POST",
-      headers: {
-        apikey: SUPABASE_SERVICE_ROLE_KEY,
-        Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
-        "Content-Type": "application/pdf",
-        "x-upsert": "true",
-      },
-      body: blob,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        chat_id: rec.user_id,
+        text: "Your payment is verified! Click below to download your tax report.",
+      }),
     });
-    if (!uploadRes.ok) {
+    const pdf = buildPdfContent(String(rec.user_id), summary, taxLine);
+    try {
+      await admin.storage.createBucket("reports", { public: true });
+    } catch {}
+    const fname = `${payment_id}.pdf`;
+    const bucket = admin.storage.from("reports");
+    const up = await bucket.upload(fname, new Blob([pdf], { type: "application/pdf" }), {
+      contentType: "application/pdf",
+      upsert: true,
+    });
+    if (up.error) {
       return NextResponse.json({ error: "upload failed" }, { status: 500 });
     }
-    const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/${fname}`;
-    await fetch(`${SUPABASE_URL}/rest/v1/payments?id=eq.${payment_id}`, {
-      method: "PATCH",
-      headers: {
-        apikey: SUPABASE_SERVICE_ROLE_KEY,
-        Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ report_file_id: fname }),
-    });
+    const { data: pub } = bucket.getPublicUrl(fname);
     await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendDocument`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        chat_id: chatId,
-        document: publicUrl,
+        chat_id: rec.user_id,
+        document: pub.publicUrl,
         caption: "Payment Verified! Here is your official Gibi-Guide Tax Report.",
       }),
     });
     return NextResponse.json({ ok: true });
   }
   if (data.startsWith("reject_")) {
-    const parts = data.split("_");
-    const payment_id = parts[1];
-    await fetch(`${SUPABASE_URL}/rest/v1/payments?id=eq.${payment_id}`, {
-      method: "PATCH",
-      headers: {
-        apikey: SUPABASE_SERVICE_ROLE_KEY,
-        Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ status: "rejected" }),
-    });
+    const payment_id = data.replace("reject_", "");
+    const { data: rec } = await admin.from("payments").select("user_id").eq("id", payment_id).single();
+    await admin.from("payments").update({ status: "rejected" }).eq("id", payment_id);
+    if (rec?.user_id) {
+      await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          chat_id: rec.user_id,
+          text: "Payment verification failed. Please ensure the screenshot shows the transaction ID clearly.",
+        }),
+      });
+    }
     return NextResponse.json({ ok: true });
   }
   return NextResponse.json({ ok: true });
