@@ -66,6 +66,7 @@ export default function Home() {
   const [recognitionSupported, setRecognitionSupported] = useState(false);
   const [speakEnabled, setSpeakEnabled] = useState(false);
   const [calcFor, setCalcFor] = useState<"employee" | "sole" | "small" | "plc">("employee");
+  const [voicesReady, setVoicesReady] = useState(false);
   const SoleSection = dynamic(() => import("./components/SoleProprietorSection"), {
     ssr: false,
     loading: () => <div className="text-xs text-gray-500">Loading…</div>,
@@ -155,6 +156,19 @@ export default function Home() {
   }, [isPaymentReady]);
 
   useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!("speechSynthesis" in window)) return;
+    const s = window.speechSynthesis;
+    const handler = () => setVoicesReady(true);
+    s.onvoiceschanged = handler as unknown as () => void;
+    const vs = s.getVoices();
+    if (vs && vs.length) setVoicesReady(true);
+    return () => {
+      s.onvoiceschanged = null as unknown as () => void;
+    };
+  }, []);
+
+  useEffect(() => {
     if (activeTab !== "chat") return;
     if (typeof navigator === "undefined") return;
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return;
@@ -220,10 +234,9 @@ export default function Home() {
       const data = await res.json();
       const answer = data.text ?? "No answer.";
       addMessage("assistant", answer);
-      if (speakEnabled && typeof window !== "undefined" && "speechSynthesis" in window) {
-        const utter = new SpeechSynthesisUtterance(answer);
-        utter.lang = usedLang === "am" ? "am-ET" : "en-US";
-        window.speechSynthesis.speak(utter);
+      if (speakEnabled) {
+        const code = usedLang === "am" ? "am-ET" : "en-US";
+        speakText(answer, code);
       }
     } catch {
       addMessage(
@@ -232,6 +245,32 @@ export default function Home() {
       );
     } finally {
       setIsSending(false);
+    }
+  };
+
+  const getVoices = () => {
+    if (typeof window === "undefined" || !("speechSynthesis" in window)) return [];
+    return window.speechSynthesis.getVoices();
+  };
+
+  const pickVoice = (code: string) => {
+    const vs = getVoices();
+    const lc = code.toLowerCase();
+    const exact = vs.find((v) => (v.lang || "").toLowerCase().startsWith(lc));
+    if (exact) return exact;
+    const contains = vs.find((v) => (v.lang || "").toLowerCase().includes(lc));
+    return contains || vs[0];
+  };
+
+  const playGoogleTTS = (text: string, code: string) => {
+    try {
+      const url = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(
+        text
+      )}&tl=${encodeURIComponent(code)}&client=tw-ob`;
+      const audio = new Audio(url);
+      audio.play().catch(() => {});
+    } catch {
+      //
     }
   };
 
@@ -282,12 +321,17 @@ export default function Home() {
     setIsRecording(false);
   };
 
-  const speakText = (text: string) => {
-    if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
-    const isAmharic = /[\u1200-\u137F]/.test(text);
-    const utter = new SpeechSynthesisUtterance(text);
-    utter.lang = isAmharic ? "am-ET" : "en-US";
-    window.speechSynthesis.speak(utter);
+  const speakText = (text: string, code?: string) => {
+    const target = code ?? (/[\u1200-\u137F]/.test(text) ? "am-ET" : "en-US");
+    if (typeof window !== "undefined" && "speechSynthesis" in window) {
+      const utter = new SpeechSynthesisUtterance(text);
+      const v = pickVoice(target);
+      if (v) utter.voice = v;
+      utter.lang = target;
+      window.speechSynthesis.speak(utter);
+      return;
+    }
+    playGoogleTTS(text, target);
   };
 
   const sendFeedback = async (messageId: string, rating: "like" | "dislike") => {
@@ -472,7 +516,12 @@ export default function Home() {
                     </button>
                     <button
                       className="px-2 py-1 rounded-full border border-gray-200 text-gray-700"
-                      onClick={() => speakText(m.content)}
+                      onClick={() =>
+                        speakText(
+                          m.content,
+                          /[\u1200-\u137F]/.test(m.content) ? "am-ET" : "en-US"
+                        )
+                      }
                       title="Play audio"
                     >
                       ▶
